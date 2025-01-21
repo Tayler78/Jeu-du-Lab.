@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jeu de Labyrinthe</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f0f0f0;
+    }
+
+    #game-board {
+      width: 300px;
+      height: 300px;
+      position: relative;
+      background-color: #ffffff;
+      border: 2px solid #000;
+    }
+
+    .wall {
+      background-color: #000;
+      position: absolute;
+    }
+
+    #player {
+      width: 20px;
+      height: 20px;
+      background-color: red;
+      position: absolute;
+      top: 20px;
+      left: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="game-board">
+    <div id="player"></div>
+    <!-- Murs du labyrinthe -->
+    <div class="wall" style="top: 0; left: 0; width: 300px; height: 20px;"></div>  <!-- Mur du haut -->
+    <div class="wall" style="top: 0; left: 0; width: 20px; height: 300px;"></div>  <!-- Mur de gauche -->
+    <div class="wall" style="top: 280px; left: 0; width: 300px; height: 20px;"></div>  <!-- Mur du bas -->
+    <div class="wall" style="top: 0; left: 280px; width: 20px; height: 300px;"></div>  <!-- Mur de droite -->
+    <div class="wall" style="top: 100px; left: 100px; width: 100px; height: 20px;"></div>  <!-- Mur horizontal -->
+    <div class="wall" style="top: 100px; left: 200px; width: 20px; height: 100px;"></div>  <!-- Mur vertical -->
+  </div>
+
+  <script>
+    let player = document.getElementById('player');
+    let gameBoard = document.getElementById('game-board');
+    let playerX = 20, playerY = 20;  // Position initiale du joueur
+    const playerSpeed = 20;  // Vitesse de déplacement
+
+    // Fonction pour déplacer le joueur
+    function movePlayer(dx, dy) {
+      let newX = playerX + dx;
+      let newY = playerY + dy;
+
+      // Vérifie si la nouvelle position est libre (sans murs)
+      if (isMoveValid(newX, newY)) {
+        playerX = newX;
+        playerY = newY;
+        player.style.left = playerX + 'px';
+        player.style.top = playerY + 'px';
+      }
+    }
+
+    // Vérifie si le mouvement est valide (pas de collision avec un mur)
+    function isMoveValid(newX, newY) {
+      // L'algorithme de validation de mouvement pourrait être plus complexe selon le labyrinthe
+      // Ici, on vérifie les collisions simples avec les murs
+      if (
+        newX < 0 || newY < 0 || newX >= 280 || newY >= 280 ||  // Limites du plateau
+        (newX >= 100 && newX <= 200 && newY >= 100 && newY <= 120) ||  // Mur horizontal
+        (newX >= 200 && newX <= 220 && newY >= 100 && newY <= 200)    // Mur vertical
+      ) {
+        return false;
+      }
+      return true;
+    }
+
+    // Gérer les entrées clavier
+    window.addEventListener('keydown', function(event) {
+      if (event.key === 'ArrowUp') {
+        movePlayer(0, -playerSpeed);
+      } else if (event.key === 'ArrowDown') {
+        movePlayer(0, playerSpeed);
+      } else if (event.key === 'ArrowLeft') {
+        movePlayer(-playerSpeed, 0);
+      } else if (event.key === 'ArrowRight') {
+        movePlayer(playerSpeed, 0);
+      }
+    });
+  </script>
+
+</body>
+</html>
