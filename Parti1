@@ -8,11 +8,24 @@
     body {
       font-family: Arial, sans-serif;
       display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
       height: 100vh;
       margin: 0;
       background-color: #f0f0f0;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin-bottom: 10px;
+    }
+
+    #info {
+      margin-bottom: 10px;
+      color: #333;
+      height: 20px;
+      font-weight: bold;
     }
 
     #game-board {
@@ -21,11 +34,19 @@
       position: relative;
       background-color: #ffffff;
       border: 2px solid #000;
+      box-sizing: content-box;
     }
 
     .wall {
       background-color: #000;
       position: absolute;
+    }
+
+    #goal {
+      position: absolute;
+      background-color: gold;
+      border: 2px solid #c9a400;
+      box-sizing: border-box;
     }
 
     #player {
@@ -35,67 +56,129 @@
       position: absolute;
       top: 20px;
       left: 20px;
+      border-radius: 4px;
+      transition: top 0.08s linear, left 0.08s linear;
+    }
+
+    #restart {
+      margin-top: 12px;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
 
+  <h1>🎮 Jeu de Labyrinthe</h1>
+  <div id="info">Utilise les flèches pour atteindre la case dorée !</div>
+
   <div id="game-board">
     <div id="player"></div>
+
+    <!-- Objectif à atteindre -->
+    <div id="goal" style="top: 240px; left: 240px; width: 40px; height: 40px;"></div>
+
     <!-- Murs du labyrinthe -->
-    <div class="wall" style="top: 0; left: 0; width: 300px; height: 20px;"></div>  <!-- Mur du haut -->
-    <div class="wall" style="top: 0; left: 0; width: 20px; height: 300px;"></div>  <!-- Mur de gauche -->
-    <div class="wall" style="top: 280px; left: 0; width: 300px; height: 20px;"></div>  <!-- Mur du bas -->
-    <div class="wall" style="top: 0; left: 280px; width: 20px; height: 300px;"></div>  <!-- Mur de droite -->
-    <div class="wall" style="top: 100px; left: 100px; width: 100px; height: 20px;"></div>  <!-- Mur horizontal -->
-    <div class="wall" style="top: 100px; left: 200px; width: 20px; height: 100px;"></div>  <!-- Mur vertical -->
+    <div class="wall" style="top: 0; left: 0; width: 300px; height: 20px;"></div>   <!-- Mur du haut -->
+    <div class="wall" style="top: 0; left: 0; width: 20px; height: 300px;"></div>   <!-- Mur de gauche -->
+    <div class="wall" style="top: 280px; left: 0; width: 300px; height: 20px;"></div>   <!-- Mur du bas -->
+    <div class="wall" style="top: 0; left: 280px; width: 20px; height: 300px;"></div>   <!-- Mur de droite -->
+    <div class="wall" style="top: 100px; left: 100px; width: 100px; height: 20px;"></div>   <!-- Mur horizontal -->
+    <div class="wall" style="top: 100px; left: 200px; width: 20px; height: 100px;"></div>   <!-- Mur vertical -->
+    <div class="wall" style="top: 60px; left: 20px; width: 120px; height: 20px;"></div>   <!-- Mur supplémentaire -->
+    <div class="wall" style="top: 180px; left: 60px; width: 20px; height: 100px;"></div>   <!-- Mur supplémentaire -->
   </div>
 
+  <button id="restart">↻ Recommencer</button>
+
   <script>
-    let player = document.getElementById('player');
-    let gameBoard = document.getElementById('game-board');
-    let playerX = 20, playerY = 20;  // Position initiale du joueur
-    const playerSpeed = 20;  // Vitesse de déplacement
+    const player = document.getElementById('player');
+    const board = document.getElementById('game-board');
+    const goalEl = document.getElementById('goal');
+    const info = document.getElementById('info');
 
-    // Fonction pour déplacer le joueur
+    const PLAYER_SIZE = 20;
+    const startX = 20, startY = 20;
+    let playerX = startX, playerY = startY;
+    const playerSpeed = 20;
+    let won = false;
+
+    // Récupère la liste des murs sous forme de rectangles {x, y, w, h}
+    const walls = Array.from(document.querySelectorAll('.wall')).map(el => ({
+      x: parseFloat(el.style.left),
+      y: parseFloat(el.style.top),
+      w: parseFloat(el.style.width),
+      h: parseFloat(el.style.height)
+    }));
+
+    // Rectangle de l'objectif
+    const goal = {
+      x: parseFloat(goalEl.style.left),
+      y: parseFloat(goalEl.style.top),
+      w: parseFloat(goalEl.style.width),
+      h: parseFloat(goalEl.style.height)
+    };
+
+    // Test de chevauchement entre deux rectangles (AABB)
+    function overlaps(ax, ay, aw, ah, bx, by, bw, bh) {
+      return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    }
+
+    // Le mouvement est valide si le joueur reste dans le plateau et ne touche aucun mur
+    function isMoveValid(newX, newY) {
+      // Limites du plateau (300x300)
+      if (newX < 0 || newY < 0 || newX + PLAYER_SIZE > 300 || newY + PLAYER_SIZE > 300) {
+        return false;
+      }
+      // Collision avec chaque mur
+      for (const wall of walls) {
+        if (overlaps(newX, newY, PLAYER_SIZE, PLAYER_SIZE, wall.x, wall.y, wall.w, wall.h)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function checkWin() {
+      if (overlaps(playerX, playerY, PLAYER_SIZE, PLAYER_SIZE, goal.x, goal.y, goal.w, goal.h)) {
+        won = true;
+        info.textContent = "🎉 Gagné ! Bravo !";
+        info.style.color = "green";
+      }
+    }
+
     function movePlayer(dx, dy) {
-      let newX = playerX + dx;
-      let newY = playerY + dy;
-
-      // Vérifie si la nouvelle position est libre (sans murs)
+      if (won) return;
+      const newX = playerX + dx;
+      const newY = playerY + dy;
       if (isMoveValid(newX, newY)) {
         playerX = newX;
         playerY = newY;
         player.style.left = playerX + 'px';
         player.style.top = playerY + 'px';
+        checkWin();
       }
     }
 
-    // Vérifie si le mouvement est valide (pas de collision avec un mur)
-    function isMoveValid(newX, newY) {
-      // L'algorithme de validation de mouvement pourrait être plus complexe selon le labyrinthe
-      // Ici, on vérifie les collisions simples avec les murs
-      if (
-        newX < 0 || newY < 0 || newX >= 280 || newY >= 280 ||  // Limites du plateau
-        (newX >= 100 && newX <= 200 && newY >= 100 && newY <= 120) ||  // Mur horizontal
-        (newX >= 200 && newX <= 220 && newY >= 100 && newY <= 200)    // Mur vertical
-      ) {
-        return false;
+    window.addEventListener('keydown', function (event) {
+      switch (event.key) {
+        case 'ArrowUp':    event.preventDefault(); movePlayer(0, -playerSpeed); break;
+        case 'ArrowDown':  event.preventDefault(); movePlayer(0, playerSpeed);  break;
+        case 'ArrowLeft':  event.preventDefault(); movePlayer(-playerSpeed, 0); break;
+        case 'ArrowRight': event.preventDefault(); movePlayer(playerSpeed, 0);  break;
       }
-      return true;
-    }
+    });
 
-    // Gérer les entrées clavier
-    window.addEventListener('keydown', function(event) {
-      if (event.key === 'ArrowUp') {
-        movePlayer(0, -playerSpeed);
-      } else if (event.key === 'ArrowDown') {
-        movePlayer(0, playerSpeed);
-      } else if (event.key === 'ArrowLeft') {
-        movePlayer(-playerSpeed, 0);
-      } else if (event.key === 'ArrowRight') {
-        movePlayer(playerSpeed, 0);
-      }
+    document.getElementById('restart').addEventListener('click', function () {
+      playerX = startX;
+      playerY = startY;
+      player.style.left = playerX + 'px';
+      player.style.top = playerY + 'px';
+      won = false;
+      info.textContent = "Utilise les flèches pour atteindre la case dorée !";
+      info.style.color = "#333";
+      player.focus();
     });
   </script>
 
