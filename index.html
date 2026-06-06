@@ -44,9 +44,36 @@
       border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer;
     }
     button:hover { background: #1565c0; }
+
+    #admin-bar { width: 100%; display: flex; gap: 8px; justify-content: center; padding: 8px 0; background: #263238; }
+    #admin-toggle, #sound-toggle { margin: 0; background: #455a64; }
+    #admin-toggle:hover, #sound-toggle:hover { background: #546e7a; }
+    #admin-panel {
+      width: 100%; background: #eceff1; border-bottom: 1px solid #cfd8dc;
+      padding: 12px; text-align: center;
+    }
+    #admin-panel .games { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; }
+    #admin-panel .games button { margin: 0; background: #00897b; }
+    #admin-panel .games button:hover { background: #00695c; }
+    #admin-panel .jump { display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+    #admin-panel input { width: 70px; padding: 6px; font-size: 0.9rem; }
+    #admin-panel .jump button { margin: 0; }
   </style>
 </head>
 <body>
+
+  <div id="admin-bar">
+    <button id="admin-toggle">🛠️ Admin — choisir un jeu / niveau</button>
+    <button id="sound-toggle">🔊 Son</button>
+  </div>
+  <div id="admin-panel" style="display:none;">
+    <div class="games" id="admin-games"></div>
+    <div class="jump">
+      <label for="admin-level">Aller au niveau (1–100) :</label>
+      <input id="admin-level" type="number" min="1" max="100" value="1">
+      <button id="admin-go">Aller</button>
+    </div>
+  </div>
 
   <h1>Arcade — 100 niveaux</h1>
   <div id="hud">
@@ -102,6 +129,69 @@
       rnd:  (n) => Math.floor(Math.random() * n),
     };
 
+    // =====================================================================
+    //  Sound design — synthèse Web Audio (aucun fichier externe requis)
+    // =====================================================================
+    const Sfx = (function () {
+      let ac = null, muted = false;
+      function ctx() {
+        if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; } }
+        return ac;
+      }
+      function tone(freq, dur, type, vol, when) {
+        if (muted) return;
+        const c = ctx(); if (!c) return;
+        const t = c.currentTime + (when || 0);
+        const o = c.createOscillator(), g = c.createGain();
+        o.type = type || 'square'; o.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(vol || 0.12, t + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(g); g.connect(c.destination);
+        o.start(t); o.stop(t + dur + 0.02);
+      }
+      function slide(f1, f2, dur, type, vol) {
+        if (muted) return;
+        const c = ctx(); if (!c) return; const t = c.currentTime;
+        const o = c.createOscillator(), g = c.createGain();
+        o.type = type || 'sawtooth';
+        o.frequency.setValueAtTime(f1, t);
+        o.frequency.exponentialRampToValueAtTime(Math.max(1, f2), t + dur);
+        g.gain.setValueAtTime(vol || 0.12, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(g); g.connect(c.destination);
+        o.start(t); o.stop(t + dur + 0.02);
+      }
+      function noise(dur, vol) {
+        if (muted) return;
+        const c = ctx(); if (!c) return; const t = c.currentTime;
+        const n = Math.floor(c.sampleRate * dur);
+        const buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0);
+        for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+        const s = c.createBufferSource(); s.buffer = buf;
+        const g = c.createGain(); g.gain.value = vol || 0.18;
+        s.connect(g); g.connect(c.destination); s.start(t);
+      }
+      const SIMON = [330, 392, 494, 587];
+      return {
+        resume() { const c = ctx(); if (c && c.state === 'suspended') c.resume(); },
+        toggle() { muted = !muted; return muted; },
+        isMuted() { return muted; },
+        move:      () => tone(200, 0.05, 'square', 0.06),
+        eat:       () => { tone(880, 0.07, 'square', 0.12); tone(1320, 0.08, 'square', 0.1, 0.06); },
+        paddle:    () => tone(440, 0.05, 'square', 0.13),
+        wall:      () => tone(300, 0.04, 'square', 0.08),
+        brick:     () => tone(560, 0.06, 'square', 0.12),
+        laser:     () => slide(900, 280, 0.12, 'sawtooth', 0.1),
+        explosion: () => noise(0.18, 0.2),
+        point:     () => { tone(700, 0.1, 'triangle', 0.14); tone(1050, 0.1, 'triangle', 0.12, 0.07); },
+        simon:     (i) => tone(SIMON[i] || 440, 0.3, 'sine', 0.18),
+        win:       () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.16, 'square', 0.12, i * 0.08)),
+        fail:      () => slide(420, 80, 0.4, 'sawtooth', 0.16),
+        victory:   () => [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, 0.24, 'square', 0.14, i * 0.12)),
+      };
+    })();
+
     // Découpage des 100 niveaux en blocs de jeux.
     const GAMES = [
       { name: 'Labyrinthe',  span: 15, factory: MazeGame,     help: 'Flèches ou ZQSD : atteignez la sortie verte.' },
@@ -154,8 +244,11 @@
         elapsed = (t - levelStart) / 1000;
         timeEl.textContent = Math.floor(elapsed) + 's';
         instance.update(dt);
-        ctx.clearRect(0, 0, W, H);
-        instance.draw(ctx);
+        // update() peut avoir terminé le niveau (win/fail remet instance à null).
+        if (instance) {
+          ctx.clearRect(0, 0, W, H);
+          instance.draw(ctx);
+        }
       } else {
         ctx.clearRect(0, 0, W, H);
         ctx.fillStyle = '#fafafa';
@@ -176,6 +269,7 @@
       instance = null;
 
       if (level >= TOTAL_LEVELS) {
+        Sfx.victory();
         cancelAnimationFrame(rafId); rafId = null;
         ctx.clearRect(0, 0, W, H);
         ctx.fillStyle = '#fffde7'; ctx.fillRect(0, 0, W, H);
@@ -192,6 +286,7 @@
         return;
       }
 
+      Sfx.win();
       const next = levelInfo(level + 1);
       if (next.game !== cur.game) {
         overlay = 'Niveau ' + level + ' réussi !\nNouveau jeu : ' + next.game.name + ' !';
@@ -208,6 +303,7 @@
       if (transitioning) return;
       transitioning = true;
       instance = null;
+      Sfx.fail();
       overlay = (txt || 'Perdu !') + '\nOn recommence le niveau ' + level + '.';
       messageEl.textContent = (txt || 'Perdu !') + ' On recommence le niveau ' + level + '.';
       const cur = level;
@@ -219,6 +315,8 @@
     function norm(k) { return k === ' ' ? ' ' : k.toLowerCase(); }
 
     window.addEventListener('keydown', (e) => {
+      if (e.target && e.target.tagName === 'INPUT') return; // ne pas perturber la saisie du niveau
+      Sfx.resume(); // l'audio démarre après une première interaction (politique navigateur)
       const k = norm(e.key);
       if (MOVE_KEYS.has(k)) e.preventDefault();
       if (!keys[k] && instance && instance.keydown) instance.keydown(k);
@@ -288,6 +386,7 @@
         const nx = px + dx, ny = py + dy;
         if (nx < 0 || ny < 0 || nx >= size || ny >= size) return;
         px = nx; py = ny;
+        Sfx.move();
         if (px === ex && py === ey) eng.win();
       }
       return {
@@ -366,7 +465,7 @@
         const pBody = grow ? player : player.slice(0, player.length - 1);
         if (out(ph) || occupied(ph, pBody) || occupied(ph, ai)) { eng.fail('Collision !'); return; }
         player.unshift(ph);
-        if (grow) { pScore++; if (pScore >= TARGET) { eng.win(); return; } spawnApple(); }
+        if (grow) { Sfx.eat(); pScore++; if (pScore >= TARGET) { eng.win(); return; } spawnApple(); }
         else player.pop();
         // IA
         aiDir = chooseAi();
@@ -422,20 +521,21 @@
           if (eng.rightDown()) px += 320 * dt;
           px = Math.max(0, Math.min(W - pw, px));
           bx += bvx * dt; by += bvy * dt;
-          if (bx < r) { bx = r; bvx = Math.abs(bvx); }
-          if (bx > W - r) { bx = W - r; bvx = -Math.abs(bvx); }
-          if (by < r) { by = r; bvy = Math.abs(bvy); }
+          if (bx < r) { bx = r; bvx = Math.abs(bvx); Sfx.wall(); }
+          if (bx > W - r) { bx = W - r; bvx = -Math.abs(bvx); Sfx.wall(); }
+          if (by < r) { by = r; bvy = Math.abs(bvy); Sfx.wall(); }
           if (by > H) { lives--; if (lives <= 0) { eng.fail('Balle perdue !'); return; } reset(); return; }
           if (by + r >= py && by - r <= py + ph && bx >= px && bx <= px + pw && bvy > 0) {
             const hit = (bx - (px + pw / 2)) / (pw / 2);
             const sp = Math.hypot(bvx, bvy);
             const a = hit * (Math.PI / 3);
             bvx = sp * Math.sin(a); bvy = -Math.abs(sp * Math.cos(a));
+            Sfx.paddle();
           }
           for (const b of bricks) {
             if (!b.alive) continue;
             if (bx + r > b.x && bx - r < b.x + brickW && by + r > b.y && by - r < b.y + brickH) {
-              b.alive = false;
+              b.alive = false; Sfx.brick();
               const overX = Math.min(bx + r - b.x, b.x + brickW - (bx - r));
               const overY = Math.min(by + r - b.y, b.y + brickH - (by - r));
               if (overX < overY) bvx = -bvx; else bvy = -bvy;
@@ -509,7 +609,7 @@
           if (eng.rightDown()) px += 300 * dt;
           px = Math.max(0, Math.min(W - pw, px));
           cd -= dt;
-          if (eng.isDown(' ') && cd <= 0) { bullets.push({ x: px + pw / 2, y: py }); cd = 0.32; }
+          if (eng.isDown(' ') && cd <= 0) { bullets.push({ x: px + pw / 2, y: py }); cd = 0.32; Sfx.laser(); }
           spawnAcc += dt;
           if (spawnAcc >= spawnEvery) { spawnAcc -= spawnEvery; enemies.push({ x: 15 + eng.rnd(W - 50), y: -20, r: 14 }); }
           for (const b of bullets) b.y -= 430 * dt;
@@ -521,7 +621,7 @@
             for (let j = enemies.length - 1; j >= 0; j--) {
               const e = enemies[j], b = bullets[i];
               if (b && Math.hypot(b.x - e.x, b.y - e.y) < e.r + 3) {
-                bullets.splice(i, 1); enemies.splice(j, 1); destroyed++;
+                bullets.splice(i, 1); enemies.splice(j, 1); destroyed++; Sfx.explosion();
                 if (destroyed >= target) { eng.win(); return; }
                 break;
               }
@@ -570,7 +670,7 @@
           if (mode === 'show') {
             if (startDelay > 0) { startDelay -= dt; return; }
             flashTimer -= dt;
-            if (!flashOn && flashTimer <= 0) { flashOn = true; lit = seq[showIdx]; flashTimer = 0.55; }
+            if (!flashOn && flashTimer <= 0) { flashOn = true; lit = seq[showIdx]; Sfx.simon(lit); flashTimer = 0.55; }
             else if (flashOn && flashTimer <= 0) {
               flashOn = false; lit = -1; flashTimer = 0.25; showIdx++;
               if (showIdx >= seq.length) { mode = 'input'; inputIdx = 0; }
@@ -585,7 +685,7 @@
           else if (k === 'arrowdown' || k === 's') q = 2;
           else if (k === 'arrowleft' || k === 'q' || k === 'a') q = 3;
           if (q < 0) return;
-          lit = q; setTimeout(() => { if (instance) lit = -1; }, 150);
+          lit = q; Sfx.simon(q); setTimeout(() => { if (instance) lit = -1; }, 150);
           if (q === seq[inputIdx]) {
             inputIdx++;
             if (inputIdx >= seq.length) eng.win();
@@ -626,20 +726,22 @@
           else if (by > center + 8) ay += aiSpeed * dt;
           ay = Math.max(0, Math.min(H - ph, ay));
           bx += bvx * dt; by += bvy * dt;
-          if (by < r) { by = r; bvy = Math.abs(bvy); }
-          if (by > H - r) { by = H - r; bvy = -Math.abs(bvy); }
+          if (by < r) { by = r; bvy = Math.abs(bvy); Sfx.wall(); }
+          if (by > H - r) { by = H - r; bvy = -Math.abs(bvy); Sfx.wall(); }
           // raquette joueur (gauche)
           if (bx - r < margin + pw && by > py && by < py + ph && bvx < 0) {
             bx = margin + pw + r; bvx = Math.abs(bvx);
             bvy += ((by - (py + ph / 2)) / (ph / 2)) * 120;
+            Sfx.paddle();
           }
           // raquette IA (droite)
           if (bx + r > W - margin - pw && by > ay && by < ay + ph && bvx > 0) {
             bx = W - margin - pw - r; bvx = -Math.abs(bvx);
             bvy += ((by - (ay + ph / 2)) / (ph / 2)) * 120;
+            Sfx.paddle();
           }
-          if (bx < -10) { aPts++; if (aPts >= TARGET) { eng.fail('L’IA gagne le match !'); return; } serve(false); }
-          if (bx > W + 10) { pPts++; if (pPts >= TARGET) { eng.win(); return; } serve(true); }
+          if (bx < -10) { Sfx.point(); aPts++; if (aPts >= TARGET) { eng.fail('L’IA gagne le match !'); return; } serve(false); }
+          if (bx > W + 10) { Sfx.point(); pPts++; if (pPts >= TARGET) { eng.win(); return; } serve(true); }
         },
         draw(c) {
           c.strokeStyle = '#ccc'; c.setLineDash([6, 10]); c.beginPath();
@@ -652,6 +754,52 @@
         }
       };
     }
+
+    // ---- panneau admin (accessible à tout le monde) ----------------------
+    const adminToggle = document.getElementById('admin-toggle');
+    const adminPanel = document.getElementById('admin-panel');
+    const adminGames = document.getElementById('admin-games');
+    const adminLevelInput = document.getElementById('admin-level');
+    const adminGo = document.getElementById('admin-go');
+
+    // Un bouton par jeu : amène au premier niveau du bloc correspondant.
+    let blockStart = 1;
+    for (const g of GAMES) {
+      const start = blockStart;
+      const b = document.createElement('button');
+      b.textContent = g.name + ' (niv. ' + start + ')';
+      b.addEventListener('click', () => { Sfx.resume(); go(start); b.blur(); });
+      adminGames.appendChild(b);
+      blockStart += g.span;
+    }
+
+    function go(n) {
+      n = Math.max(1, Math.min(TOTAL_LEVELS, parseInt(n, 10) || 1));
+      transitioning = false;
+      restartBtn.style.display = 'none';
+      if (!rafId) rafId = requestAnimationFrame(loop);
+      startLevel(n);
+      adminLevelInput.value = n;
+    }
+
+    let adminOpen = false;
+    adminToggle.addEventListener('click', () => {
+      Sfx.resume();
+      adminOpen = !adminOpen;
+      adminPanel.style.display = adminOpen ? 'block' : 'none';
+      adminToggle.blur();
+    });
+
+    const soundToggle = document.getElementById('sound-toggle');
+    soundToggle.addEventListener('click', () => {
+      Sfx.resume();
+      const muted = Sfx.toggle();
+      soundToggle.textContent = muted ? '🔇 Muet' : '🔊 Son';
+      soundToggle.blur();
+    });
+
+    adminGo.addEventListener('click', () => { Sfx.resume(); go(adminLevelInput.value); adminGo.blur(); });
+    adminLevelInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { go(adminLevelInput.value); adminLevelInput.blur(); } });
 
     // ---- démarrage --------------------------------------------------------
     startLevel(1);
