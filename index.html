@@ -3,90 +3,298 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Arcade 100 niveaux</title>
+  <title>ARCADE 100 — 7 jeux, 100 niveaux</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800;900&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #f0f0f0;
-      --board-bg: #ffffff;
-      --accent: #1e88e5;
+      --bg-0: #04060f;
+      --bg-1: #080c1c;
+      --bg-2: #0d1330;
+      --ink: #eaf1ff;
+      --dim: #8b95bd;
+      --cyan: #36f0ff;
+      --magenta: #ff3ea5;
+      --violet: #8b5cff;
+      --gold: #ffd36e;
+      --line: rgba(140, 160, 220, 0.16);
+      --glass: rgba(16, 22, 48, 0.55);
+      --display: 'Unbounded', sans-serif;
+      --body: 'Sora', system-ui, sans-serif;
     }
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
-      font-family: Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
       margin: 0;
-      background-color: var(--bg);
-      color: #222;
+      font-family: var(--body);
+      color: var(--ink);
+      background: var(--bg-0);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
     }
-    h1 { margin: 10px 0 4px; font-size: 1.3rem; }
-    #hud {
-      display: flex;
-      gap: 18px;
-      margin-bottom: 10px;
-      font-size: 0.95rem;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    #hud span { font-weight: bold; color: var(--accent); }
-    #game-board {
-      background-color: var(--board-bg);
-      border: 2px solid #000;
-      touch-action: none;
-    }
-    #message { margin-top: 12px; min-height: 24px; font-size: 1.05rem; text-align: center; }
-    #controls { margin-top: 8px; font-size: 0.85rem; color: #555; text-align: center; max-width: 440px; }
-    button {
-      margin-top: 10px; padding: 8px 16px; font-size: 0.95rem; border: none;
-      border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer;
-    }
-    button:hover { background: #1565c0; }
+    ::selection { background: var(--magenta); color: #fff; }
 
-    #admin-bar { width: 100%; display: flex; gap: 8px; justify-content: center; padding: 8px 0; background: #263238; }
-    #admin-toggle, #sound-toggle { margin: 0; background: #455a64; }
-    #admin-toggle:hover, #sound-toggle:hover { background: #546e7a; }
-    #admin-panel {
-      width: 100%; background: #eceff1; border-bottom: 1px solid #cfd8dc;
-      padding: 12px; text-align: center;
+    /* ---------- Décor de fond animé ---------- */
+    .bg-layer { position: fixed; inset: 0; z-index: -2; overflow: hidden; background:
+        radial-gradient(120% 90% at 80% -10%, #15183f 0%, transparent 55%),
+        radial-gradient(120% 90% at 0% 110%, #1a0f33 0%, transparent 55%),
+        linear-gradient(180deg, var(--bg-0), var(--bg-1)); }
+    .bg-grid {
+      position: absolute; inset: -2px;
+      background-image:
+        linear-gradient(var(--line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 46px 46px;
+      mask-image: radial-gradient(120% 80% at 50% 30%, #000 30%, transparent 78%);
+      animation: gridDrift 28s linear infinite;
     }
-    #admin-panel .games { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; }
-    #admin-panel .games button { margin: 0; background: #00897b; }
-    #admin-panel .games button:hover { background: #00695c; }
-    #admin-panel .jump { display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; }
-    #admin-panel input { width: 70px; padding: 6px; font-size: 0.9rem; }
-    #admin-panel .jump button { margin: 0; }
+    @keyframes gridDrift { to { background-position: 46px 92px; } }
+    .bg-orb { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.55; mix-blend-mode: screen; }
+    .orb-1 { width: 46vw; height: 46vw; left: -8vw; top: -6vw; background: radial-gradient(circle, var(--violet), transparent 65%); animation: float1 19s ease-in-out infinite; }
+    .orb-2 { width: 40vw; height: 40vw; right: -6vw; top: 22vh; background: radial-gradient(circle, var(--cyan), transparent 65%); animation: float2 23s ease-in-out infinite; }
+    .orb-3 { width: 38vw; height: 38vw; left: 28vw; bottom: -12vw; background: radial-gradient(circle, var(--magenta), transparent 65%); animation: float1 26s ease-in-out infinite reverse; }
+    @keyframes float1 { 0%,100%{ transform: translate(0,0) scale(1);} 50%{ transform: translate(4vw,5vh) scale(1.08);} }
+    @keyframes float2 { 0%,100%{ transform: translate(0,0) scale(1);} 50%{ transform: translate(-5vw,4vh) scale(0.94);} }
+    .bg-grain {
+      position: absolute; inset: 0; pointer-events: none; opacity: 0.05; mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    /* ---------- Barre de progression de scroll ---------- */
+    .scroll-progress { position: fixed; top: 0; left: 0; height: 3px; width: 0; z-index: 60;
+      background: linear-gradient(90deg, var(--cyan), var(--magenta)); box-shadow: 0 0 14px var(--magenta); }
+
+    /* ---------- Navigation ---------- */
+    .nav { position: fixed; top: 0; left: 0; right: 0; z-index: 50; display: flex; align-items: center;
+      justify-content: space-between; padding: 14px clamp(16px, 4vw, 48px);
+      background: linear-gradient(180deg, rgba(4,6,15,0.85), rgba(4,6,15,0));
+      backdrop-filter: blur(10px); }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
+    .brand-mark { font-size: 1.3rem; color: var(--cyan); text-shadow: 0 0 12px var(--cyan); }
+    .brand-text { font-family: var(--display); font-weight: 800; letter-spacing: 1px; font-size: 1.05rem; }
+    .brand-100 { color: var(--magenta); }
+    .nav-actions { display: flex; gap: 10px; }
+
+    /* ---------- Boutons ---------- */
+    .btn { font-family: var(--body); font-weight: 600; font-size: 0.86rem; cursor: pointer;
+      border-radius: 999px; padding: 9px 18px; border: 1px solid var(--line); color: var(--ink);
+      background: var(--glass); backdrop-filter: blur(8px); transition: transform .18s, box-shadow .25s, border-color .25s, background .25s; }
+    .btn:hover { transform: translateY(-2px); border-color: var(--cyan); box-shadow: 0 8px 26px rgba(54,240,255,0.22); }
+    .btn:active { transform: translateY(0); }
+    .btn-solid { border: none; color: #05060f; font-weight: 700;
+      background: linear-gradient(135deg, var(--cyan), var(--violet)); box-shadow: 0 8px 26px rgba(123,92,255,0.35); }
+    .btn-solid:hover { box-shadow: 0 12px 34px rgba(123,92,255,0.5); }
+
+    /* ---------- Drawer admin ---------- */
+    .admin-panel { position: fixed; top: 64px; left: 0; right: 0; z-index: 45;
+      border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+      background: rgba(8,12,28,0.82); backdrop-filter: blur(16px);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.5); animation: drawerDown .35s cubic-bezier(.2,.8,.2,1); }
+    @keyframes drawerDown { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: translateY(0); } }
+    .admin-inner { max-width: 980px; margin: 0 auto; padding: 18px clamp(16px,4vw,32px) 22px; text-align: center; }
+    .admin-title { margin: 0 0 14px; color: var(--dim); font-size: 0.82rem; letter-spacing: 2px; text-transform: uppercase; }
+    .admin-panel .games { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 16px; }
+    .admin-panel .games button { margin: 0; padding: 8px 14px; font-size: 0.82rem; cursor: pointer;
+      border-radius: 10px; border: 1px solid var(--line); color: var(--ink); background: rgba(255,255,255,0.04);
+      font-family: var(--body); transition: all .2s; }
+    .admin-panel .games button:hover { border-color: var(--magenta); color: #fff; transform: translateY(-2px);
+      box-shadow: 0 8px 22px rgba(255,62,165,0.25); background: rgba(255,62,165,0.08); }
+    .jump { display: inline-flex; align-items: center; gap: 10px; font-size: 0.9rem; color: var(--dim); }
+    .jump input { width: 80px; padding: 8px 10px; font-size: 0.9rem; font-family: var(--body); text-align: center;
+      border-radius: 10px; border: 1px solid var(--line); background: rgba(0,0,0,0.35); color: var(--ink); }
+    .jump input:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(54,240,255,0.18); }
+
+    /* ---------- Hero ---------- */
+    .hero { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 120px 20px 60px; position: relative; }
+    .hero-eyebrow { font-size: 0.78rem; letter-spacing: 4px; text-transform: uppercase; color: var(--cyan);
+      padding: 7px 16px; border: 1px solid var(--line); border-radius: 999px; background: rgba(54,240,255,0.06);
+      animation: rise .8s both; }
+    .hero-title { font-family: var(--display); font-weight: 900; line-height: 0.86; margin: 22px 0 0;
+      font-size: clamp(3.6rem, 16vw, 12rem); letter-spacing: -2px; display: flex; align-items: baseline; gap: 0.06em; }
+    .hero-title span { background: linear-gradient(180deg, #fff, #9fb4ff); -webkit-background-clip: text;
+      background-clip: text; color: transparent; }
+    .hero-title em { font-style: normal; color: transparent; -webkit-text-stroke: 2px var(--magenta);
+      text-shadow: 0 0 40px rgba(255,62,165,0.55); animation: hueGlow 6s ease-in-out infinite; }
+    @keyframes hueGlow { 0%,100%{ filter: drop-shadow(0 0 12px var(--magenta)); } 50%{ filter: drop-shadow(0 0 26px var(--cyan)); } }
+    .hero-sub { max-width: 620px; color: var(--dim); font-size: clamp(0.95rem, 1.6vw, 1.1rem); line-height: 1.6;
+      margin: 26px 0 0; animation: rise .8s .15s both; }
+    .hero-cta { margin-top: 34px; text-decoration: none; font-family: var(--display); font-weight: 700;
+      letter-spacing: 0.5px; padding: 15px 34px; border-radius: 999px; color: #05060f;
+      background: linear-gradient(135deg, var(--cyan), var(--magenta)); box-shadow: 0 14px 40px rgba(255,62,165,0.4);
+      transition: transform .2s, box-shadow .3s; animation: rise .8s .3s both; }
+    .hero-cta:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 20px 54px rgba(255,62,165,0.6); }
+    .scroll-cue { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
+      font-size: 0.72rem; letter-spacing: 3px; text-transform: uppercase; color: var(--dim);
+      display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .scroll-cue span { width: 20px; height: 32px; border: 1.5px solid var(--line); border-radius: 12px; position: relative; }
+    .scroll-cue span::after { content: ''; position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+      width: 4px; height: 6px; border-radius: 2px; background: var(--cyan); animation: wheel 1.6s ease-in-out infinite; }
+    @keyframes wheel { 0%{ opacity: 0; top: 6px; } 40%{ opacity: 1; } 100%{ opacity: 0; top: 18px; } }
+    @keyframes rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ---------- Borne / écran de jeu ---------- */
+    .stage { display: flex; justify-content: center; padding: 60px 16px 80px; perspective: 1400px; }
+    .cabinet { width: min(540px, 94vw); padding: 22px; border-radius: 28px;
+      background: linear-gradient(160deg, rgba(28,34,68,0.9), rgba(10,14,30,0.92));
+      border: 1px solid var(--line); transform: rotateX(4deg);
+      box-shadow: 0 40px 90px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06),
+        0 0 0 1px rgba(54,240,255,0.06); position: relative; }
+    .cabinet::before { content: ''; position: absolute; inset: 0; border-radius: 28px; padding: 1px;
+      background: linear-gradient(135deg, rgba(54,240,255,0.5), transparent 40%, rgba(255,62,165,0.5));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; opacity: 0.6; }
+    .cabinet-top { display: flex; justify-content: center; margin-bottom: 16px; }
+    .hud { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .hud-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 96px;
+      padding: 9px 14px; border-radius: 12px; background: rgba(0,0,0,0.35); border: 1px solid var(--line); }
+    .hud-k { font-size: 0.62rem; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); }
+    .hud-v { font-family: var(--display); font-weight: 700; font-size: 1rem; color: var(--gold); }
+    .hud-v i { color: var(--dim); font-style: normal; font-weight: 400; font-size: 0.8rem; }
+    #game-name { color: var(--cyan); font-size: 0.82rem; }
+
+    .screen-wrap { position: relative; border-radius: 16px; overflow: hidden; line-height: 0;
+      box-shadow: inset 0 0 60px rgba(0,0,0,0.8), 0 0 40px rgba(54,240,255,0.12); }
+    #game-board { display: block; width: 100%; height: auto; background: #fbfbfe; touch-action: none; }
+    .crt { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: overlay; opacity: 0.5;
+      background: repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0 1px, transparent 1px 3px);
+      animation: flicker 5s steps(60) infinite; }
+    @keyframes flicker { 0%,100%{opacity:.5;} 96%{opacity:.5;} 97%{opacity:.32;} 98%{opacity:.55;} }
+    .screen-glare { position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(140% 70% at 30% -10%, rgba(255,255,255,0.22), transparent 50%); }
+    .cabinet-bottom { margin-top: 18px; text-align: center; }
+    .message { min-height: 26px; font-family: var(--display); font-weight: 600; font-size: 1rem; color: var(--ink);
+      text-shadow: 0 0 18px rgba(54,240,255,0.35); }
+    .controls { margin-top: 8px; font-size: 0.82rem; color: var(--dim); line-height: 1.5; }
+    #restart { margin-top: 16px; }
+
+    /* ---------- Showcase des jeux ---------- */
+    .showcase { max-width: 1100px; margin: 0 auto; padding: 40px clamp(16px,5vw,40px) 100px; text-align: center; }
+    .section-title { font-family: var(--display); font-weight: 800; font-size: clamp(1.8rem, 5vw, 3rem); margin: 0;
+      background: linear-gradient(120deg, var(--cyan), var(--magenta)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .section-sub { color: var(--dim); margin: 12px 0 44px; font-size: 0.96rem; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; }
+    .card { position: relative; text-align: left; padding: 26px 22px 24px; border-radius: 18px; cursor: pointer;
+      background: linear-gradient(165deg, rgba(22,28,58,0.85), rgba(9,12,28,0.9)); border: 1px solid var(--line);
+      transform-style: preserve-3d; transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .3s, border-color .3s;
+      overflow: hidden; }
+    .card:hover { border-color: color-mix(in srgb, var(--c1) 70%, transparent); box-shadow: 0 26px 60px rgba(0,0,0,0.5); }
+    .card-glow { position: absolute; inset: -1px; border-radius: 18px; opacity: 0; transition: opacity .3s; pointer-events: none;
+      background: radial-gradient(70% 60% at 30% 0%, color-mix(in srgb, var(--c1) 35%, transparent), transparent 70%); }
+    .card:hover .card-glow { opacity: 1; }
+    .card-num { font-family: var(--display); font-weight: 900; font-size: 2.4rem; line-height: 1;
+      background: linear-gradient(135deg, var(--c1), var(--c2)); -webkit-background-clip: text; background-clip: text; color: transparent;
+      transform: translateZ(30px); display: inline-block; }
+    .card h3 { font-family: var(--display); font-weight: 700; margin: 14px 0 4px; font-size: 1.15rem; transform: translateZ(22px); }
+    .card p { margin: 0; color: var(--dim); font-size: 0.82rem; transform: translateZ(14px); }
+    .card-goal { display: inline-block; margin-top: 16px; font-size: 0.74rem; letter-spacing: 0.5px; color: var(--ink);
+      padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); transform: translateZ(18px); }
+
+    /* ---------- Footer ---------- */
+    .footer { border-top: 1px solid var(--line); padding: 28px 20px; display: flex; flex-wrap: wrap; gap: 8px;
+      justify-content: space-between; max-width: 1100px; margin: 0 auto; color: var(--dim); font-size: 0.82rem; }
+    .footer-dim { color: rgba(139,149,189,0.6); letter-spacing: 1px; }
+
+    /* ---------- Révélations au scroll ---------- */
+    .reveal { opacity: 0; transform: translateY(40px); transition: opacity .7s cubic-bezier(.2,.8,.2,1), transform .7s cubic-bezier(.2,.8,.2,1); }
+    .reveal.in { opacity: 1; transform: none; }
+
+    @media (max-width: 560px) {
+      .cabinet { transform: none; padding: 16px; }
+      .hud-cell { min-width: 80px; }
+      .nav-actions .btn { padding: 8px 12px; font-size: 0.78rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      .reveal { opacity: 1; transform: none; }
+    }
   </style>
 </head>
 <body>
 
-  <div id="admin-bar">
-    <button id="admin-toggle">🛠️ Admin — choisir un jeu / niveau</button>
-    <button id="sound-toggle">🔊 Son</button>
+  <div class="scroll-progress" id="scroll-progress"></div>
+
+  <div class="bg-layer" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+    <div class="bg-orb orb-3"></div>
+    <div class="bg-grain"></div>
   </div>
-  <div id="admin-panel" style="display:none;">
-    <div class="games" id="admin-games"></div>
-    <div class="jump">
-      <label for="admin-level">Aller au niveau (1–100) :</label>
-      <input id="admin-level" type="number" min="1" max="100" value="1">
-      <button id="admin-go">Aller</button>
+
+  <nav class="nav">
+    <a class="brand" href="#top">
+      <span class="brand-mark">◤◢</span>
+      <span class="brand-text">ARCADE<span class="brand-100">/100</span></span>
+    </a>
+    <div class="nav-actions">
+      <button id="sound-toggle" class="btn">🔊 Son</button>
+      <button id="admin-toggle" class="btn">⚙ Sélecteur</button>
+    </div>
+  </nav>
+
+  <div id="admin-panel" class="admin-panel" style="display:none;">
+    <div class="admin-inner">
+      <p class="admin-title">Accès libre · choisis un jeu ou un niveau</p>
+      <div class="games" id="admin-games"></div>
+      <div class="jump">
+        <label for="admin-level">Aller au niveau</label>
+        <input id="admin-level" type="number" min="1" max="100" value="1">
+        <span>/ 100</span>
+        <button id="admin-go" class="btn btn-solid">Go</button>
+      </div>
     </div>
   </div>
 
-  <h1>Arcade — 100 niveaux</h1>
-  <div id="hud">
-    <div>Niveau&nbsp;: <span id="level">1</span>/100</div>
-    <div>Jeu&nbsp;: <span id="game-name">Labyrinthe</span></div>
-    <div>Temps&nbsp;: <span id="time">0s</span></div>
-  </div>
+  <header class="hero" id="top">
+    <div class="hero-eyebrow">7 jeux · 100 niveaux · un seul écran</div>
+    <h1 class="hero-title"><span>ARCADE</span><em>100</em></h1>
+    <p class="hero-sub">Labyrinthe, Snake, Casse-brique, Esquive, Tir spatial, Mémoire et Pong — enchaîne les mondes, monte en difficulté, vise le sans-faute.</p>
+    <a class="hero-cta" href="#play">Insérer une pièce ▸</a>
+    <div class="scroll-cue" aria-hidden="true"><span></span>défile</div>
+  </header>
 
-  <canvas id="game-board" width="420" height="420"></canvas>
+  <main class="stage" id="play">
+    <div class="cabinet">
+      <div class="cabinet-top">
+        <div class="hud" id="hud">
+          <div class="hud-cell"><span class="hud-k">Niveau</span><span class="hud-v"><span id="level">1</span><i>/100</i></span></div>
+          <div class="hud-cell"><span class="hud-k">Jeu</span><span class="hud-v" id="game-name">Labyrinthe</span></div>
+          <div class="hud-cell"><span class="hud-k">Temps</span><span class="hud-v" id="time">0s</span></div>
+        </div>
+      </div>
+      <div class="screen-wrap">
+        <canvas id="game-board" width="420" height="420"></canvas>
+        <div class="crt" aria-hidden="true"></div>
+        <div class="screen-glare" aria-hidden="true"></div>
+      </div>
+      <div class="cabinet-bottom">
+        <div id="message" class="message"></div>
+        <div id="controls" class="controls"></div>
+        <button id="restart" class="btn btn-solid" style="display:none;">⟲ Recommencer depuis le niveau 1</button>
+      </div>
+    </div>
+  </main>
 
-  <div id="message"></div>
-  <div id="controls"></div>
-  <button id="restart" style="display:none;">Recommencer depuis le niveau 1</button>
+  <section class="showcase">
+    <h2 class="section-title">Les 7 mondes</h2>
+    <p class="section-sub">Un nouveau jeu tous les 15 niveaux. Clique une carte pour y sauter directement.</p>
+    <div class="cards">
+      <article class="card reveal" data-level="1"  style="--c1:#36f0ff;--c2:#0066ff"><div class="card-glow"></div><span class="card-num">01</span><h3>Labyrinthe</h3><p>Niveaux 1–15</p><span class="card-goal">Atteindre la sortie</span></article>
+      <article class="card reveal" data-level="16" style="--c1:#5dff9e;--c2:#00b36b"><div class="card-glow"></div><span class="card-num">02</span><h3>Snake</h3><p>Niveaux 16–30</p><span class="card-goal">5 pommes avant l’IA</span></article>
+      <article class="card reveal" data-level="31" style="--c1:#ffd36e;--c2:#ff8a00"><div class="card-glow"></div><span class="card-num">03</span><h3>Casse-brique</h3><p>Niveaux 31–45</p><span class="card-goal">Détruire les briques</span></article>
+      <article class="card reveal" data-level="46" style="--c1:#9aa7ff;--c2:#5b3cff"><div class="card-glow"></div><span class="card-num">04</span><h3>Esquive</h3><p>Niveaux 46–60</p><span class="card-goal">Survivre 12 s</span></article>
+      <article class="card reveal" data-level="61" style="--c1:#ff7ad9;--c2:#c400ff"><div class="card-glow"></div><span class="card-num">05</span><h3>Tir spatial</h3><p>Niveaux 61–75</p><span class="card-goal">Détruire les cibles</span></article>
+      <article class="card reveal" data-level="76" style="--c1:#36f0ff;--c2:#7a5cff"><div class="card-glow"></div><span class="card-num">06</span><h3>Mémoire</h3><p>Niveaux 76–90</p><span class="card-goal">Répéter la séquence</span></article>
+      <article class="card reveal" data-level="91" style="--c1:#ff3ea5;--c2:#ff6a3d"><div class="card-glow"></div><span class="card-num">07</span><h3>Pong</h3><p>Niveaux 91–100</p><span class="card-goal">5 points contre l’IA</span></article>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <span>ARCADE 100 — un seul fichier, zéro dépendance.</span>
+    <span class="footer-dim">HTML · CSS · JS · Web Audio</span>
+  </footer>
 
   <script>
   (function () {
@@ -800,6 +1008,46 @@
 
     adminGo.addEventListener('click', () => { Sfx.resume(); go(adminLevelInput.value); adminGo.blur(); });
     adminLevelInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { go(adminLevelInput.value); adminLevelInput.blur(); } });
+
+    // ---- cartes cliquables du showcase -----------------------------------
+    document.querySelectorAll('.card[data-level]').forEach((el) => {
+      el.addEventListener('click', () => {
+        Sfx.resume();
+        go(parseInt(el.getAttribute('data-level'), 10));
+        const play = document.getElementById('play');
+        if (play) play.scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+
+    // ---- motion design : barre de progression, révélations, tilt 3D ------
+    const progressBar = document.getElementById('scroll-progress');
+    function onScroll() {
+      const h = document.documentElement;
+      const max = h.scrollHeight - h.clientHeight;
+      progressBar.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + '%';
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((en) => { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+      }, { threshold: 0.18 });
+      document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+    } else {
+      document.querySelectorAll('.reveal').forEach((el) => el.classList.add('in'));
+    }
+
+    document.querySelectorAll('.card').forEach((card) => {
+      card.addEventListener('pointermove', (e) => {
+        if (e.pointerType === 'touch') return;
+        const r = card.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width - 0.5;
+        const py = (e.clientY - r.top) / r.height - 0.5;
+        card.style.transform = 'perspective(800px) rotateX(' + (-py * 9) + 'deg) rotateY(' + (px * 11) + 'deg) translateY(-4px)';
+      });
+      card.addEventListener('pointerleave', () => { card.style.transform = ''; });
+    });
 
     // ---- démarrage --------------------------------------------------------
     startLevel(1);
