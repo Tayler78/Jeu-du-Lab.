@@ -138,7 +138,7 @@
     .stage { display: flex; justify-content: center; padding: 60px 16px 80px; perspective: 1400px; }
     .cabinet { width: min(540px, 94vw); padding: 22px; border-radius: 28px;
       background: linear-gradient(160deg, rgba(28,34,68,0.9), rgba(10,14,30,0.92));
-      border: 1px solid var(--line); transform: rotateX(4deg);
+      border: 1px solid var(--line);
       box-shadow: 0 40px 90px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06),
         0 0 0 1px rgba(54,240,255,0.06); position: relative; }
     .cabinet::before { content: ''; position: absolute; inset: 0; border-radius: 28px; padding: 1px;
@@ -335,6 +335,8 @@
       win:  () => levelComplete(),
       fail: (txt) => levelFailed(txt),
       rnd:  (n) => Math.floor(Math.random() * n),
+      ptr: { x: 210, y: 210, down: false }, // position souris en coordonnées canvas
+      ptrActive: false,                      // true dès que la souris est utilisée
     };
 
     // =====================================================================
@@ -402,13 +404,13 @@
 
     // Découpage des 100 niveaux en blocs de jeux.
     const GAMES = [
-      { name: 'Labyrinthe',  span: 15, factory: MazeGame,     help: 'Flèches ou ZQSD : atteignez la sortie verte.' },
-      { name: 'Snake',       span: 15, factory: SnakeGame,    help: 'Flèches/ZQSD : mangez 5 pommes avant le serpent bleu (IA).' },
-      { name: 'Casse-brique',span: 15, factory: BreakoutGame, help: 'Gauche/Droite : renvoyez la balle et cassez toutes les briques. 3 vies.' },
-      { name: 'Esquive',     span: 15, factory: DodgeGame,    help: 'Gauche/Droite : survivez 12 secondes en évitant les blocs qui tombent.' },
-      { name: 'Tir spatial', span: 15, factory: ShooterGame,  help: 'Gauche/Droite : bougez. Espace : tirez. Détruisez les cibles avant qu’elles atteignent le bas.' },
-      { name: 'Mémoire',     span: 15, factory: SimonGame,    help: 'Regardez la séquence puis reproduisez-la avec les flèches (haut/droite/bas/gauche).' },
-      { name: 'Pong',        span: 10, factory: PongGame,     help: 'Haut/Bas ou Z/S : marquez 5 points contre l’IA.' },
+      { name: 'Labyrinthe',  span: 15, factory: MazeGame,     help: 'Cliquez dans une direction (haut/bas/gauche/droite) pour avancer jusqu’à la sortie verte. Flèches aussi possibles.' },
+      { name: 'Snake',       span: 15, factory: SnakeGame,    help: 'Dirigez le serpent avec la souris : mangez 5 pommes avant le serpent bleu (IA).' },
+      { name: 'Casse-brique',span: 15, factory: BreakoutGame, help: 'Déplacez la raquette à la souris et cassez toutes les briques. 3 vies.' },
+      { name: 'Esquive',     span: 15, factory: DodgeGame,    help: 'Bougez à la souris pour éviter les blocs qui tombent pendant 12 secondes.' },
+      { name: 'Tir spatial', span: 15, factory: ShooterGame,  help: 'Visez à la souris, cliquez (ou maintenez) pour tirer. Détruisez les cibles avant qu’elles atteignent le bas.' },
+      { name: 'Mémoire',     span: 15, factory: SimonGame,    help: 'Regardez la séquence puis cliquez les couleurs dans le même ordre.' },
+      { name: 'Pong',        span: 10, factory: PongGame,     help: 'Déplacez la raquette à la souris : marquez 5 points contre l’IA.' },
     ];
     const TOTAL_LEVELS = GAMES.reduce((a, g) => a + g.span, 0); // 100
 
@@ -531,6 +533,27 @@
       keys[k] = true;
     });
     window.addEventListener('keyup', (e) => { keys[norm(e.key)] = false; });
+
+    // ---- entrées souris / tactile ----------------------------------------
+    function canvasPos(e) {
+      const r = canvas.getBoundingClientRect();
+      return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+    }
+    canvas.addEventListener('pointermove', (e) => {
+      const p = canvasPos(e);
+      engine.ptr.x = p.x; engine.ptr.y = p.y; engine.ptrActive = true;
+      if (instance && instance.pointermove) instance.pointermove(p.x, p.y);
+    });
+    canvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      Sfx.resume();
+      const p = canvasPos(e);
+      engine.ptr.x = p.x; engine.ptr.y = p.y; engine.ptr.down = true; engine.ptrActive = true;
+      if (instance && instance.pointerdown) instance.pointerdown(p.x, p.y);
+    });
+    window.addEventListener('pointerup', () => { engine.ptr.down = false; });
+    canvas.style.cursor = 'crosshair';
+
     restartBtn.addEventListener('click', () => { restartBtn.style.display = 'none'; startLevel(1); });
 
     // ---- utilitaires de dessin -------------------------------------------
@@ -604,6 +627,13 @@
           else if (k === 'arrowdown' || k === 's') step(0, 1);
           else if (k === 'arrowleft' || k === 'q' || k === 'a') step(-1, 0);
           else if (k === 'arrowright' || k === 'd') step(1, 0);
+        },
+        pointerdown(mx, my) {
+          const cx = Math.floor(mx / cell), cy = Math.floor(my / cell);
+          const ddx = cx - px, ddy = cy - py;
+          if (ddx === 0 && ddy === 0) return;
+          if (Math.abs(ddx) >= Math.abs(ddy)) step(ddx >= 0 ? 1 : -1, 0);
+          else step(0, ddy >= 0 ? 1 : -1);
         },
         draw(c) {
           c.fillStyle = '#43a047';
@@ -693,6 +723,12 @@
           else if (k === 'arrowleft' || k === 'q' || k === 'a') pending = { x: -1, y: 0 };
           else if (k === 'arrowright' || k === 'd') pending = { x: 1, y: 0 };
         },
+        pointermove(mx, my) {
+          const hx = player[0].x * cell + cell / 2, hy = player[0].y * cell + cell / 2;
+          const dx = mx - hx, dy = my - hy;
+          if (Math.abs(dx) >= Math.abs(dy)) pending = { x: (dx >= 0 ? 1 : -1), y: 0 };
+          else pending = { x: 0, y: (dy >= 0 ? 1 : -1) };
+        },
         draw(c) {
           c.fillStyle = '#fafafa'; c.fillRect(0, 0, W, H);
           c.fillStyle = '#e53935';
@@ -725,8 +761,8 @@
       function reset() { bx = px + pw / 2; by = py - 14; bvx = (Math.random() < 0.5 ? -1 : 1) * speed * 0.6; bvy = -speed * 0.8; }
       return {
         update(dt) {
-          if (eng.leftDown()) px -= 320 * dt;
-          if (eng.rightDown()) px += 320 * dt;
+          if (eng.ptrActive) px = eng.ptr.x - pw / 2;
+          else { if (eng.leftDown()) px -= 320 * dt; if (eng.rightDown()) px += 320 * dt; }
           px = Math.max(0, Math.min(W - pw, px));
           bx += bvx * dt; by += bvy * dt;
           if (bx < r) { bx = r; bvx = Math.abs(bvx); Sfx.wall(); }
@@ -776,8 +812,8 @@
         update(dt) {
           timeLeft -= dt;
           if (timeLeft <= 0) { eng.win(); return; }
-          if (eng.leftDown()) px -= 300 * dt;
-          if (eng.rightDown()) px += 300 * dt;
+          if (eng.ptrActive) px = eng.ptr.x - pw / 2;
+          else { if (eng.leftDown()) px -= 300 * dt; if (eng.rightDown()) px += 300 * dt; }
           px = Math.max(0, Math.min(W - pw, px));
           spawnAcc += dt;
           if (spawnAcc >= spawnEvery) {
@@ -813,11 +849,12 @@
       let spawnAcc = spawnEvery, destroyed = 0, cd = 0;
       return {
         update(dt) {
-          if (eng.leftDown()) px -= 300 * dt;
-          if (eng.rightDown()) px += 300 * dt;
+          if (eng.ptrActive) px = eng.ptr.x - pw / 2;
+          else { if (eng.leftDown()) px -= 300 * dt; if (eng.rightDown()) px += 300 * dt; }
           px = Math.max(0, Math.min(W - pw, px));
           cd -= dt;
-          if (eng.isDown(' ') && cd <= 0) { bullets.push({ x: px + pw / 2, y: py }); cd = 0.32; Sfx.laser(); }
+          const firing = eng.ptrActive ? eng.ptr.down : eng.isDown(' ');
+          if (firing && cd <= 0) { bullets.push({ x: px + pw / 2, y: py }); cd = 0.32; Sfx.laser(); }
           spawnAcc += dt;
           if (spawnAcc >= spawnEvery) { spawnAcc -= spawnEvery; enemies.push({ x: 15 + eng.rnd(W - 50), y: -20, r: 14 }); }
           for (const b of bullets) b.y -= 430 * dt;
@@ -837,6 +874,7 @@
           }
           for (let i = bullets.length - 1; i >= 0; i--) if (bullets[i].y < -10) bullets.splice(i, 1);
         },
+        pointerdown() { if (cd <= 0) { bullets.push({ x: px + pw / 2, y: py }); cd = 0.32; Sfx.laser(); } },
         draw(c) {
           c.fillStyle = '#0d47a1'; c.fillRect(px, py, pw, ph);
           c.fillStyle = '#ffca28';
@@ -873,6 +911,16 @@
         { x: 0, y: half, w: half, h: half },         // bas-gauche  -> flèche gauche
       ];
       let mode = 'show', showIdx = 0, flashTimer = 0, flashOn = false, inputIdx = 0, lit = -1, startDelay = 0.6;
+      function press(q) {
+        if (mode !== 'input' || q < 0) return;
+        lit = q; Sfx.simon(q); setTimeout(() => { if (instance) lit = -1; }, 150);
+        if (q === seq[inputIdx]) {
+          inputIdx++;
+          if (inputIdx >= seq.length) eng.win();
+        } else {
+          eng.fail('Mauvaise séquence !');
+        }
+      }
       return {
         update(dt) {
           if (mode === 'show') {
@@ -886,19 +934,17 @@
           }
         },
         keydown(k) {
-          if (mode !== 'input') return;
           let q = -1;
           if (k === 'arrowup' || k === 'z' || k === 'w') q = 0;
           else if (k === 'arrowright' || k === 'd') q = 1;
           else if (k === 'arrowdown' || k === 's') q = 2;
           else if (k === 'arrowleft' || k === 'q' || k === 'a') q = 3;
-          if (q < 0) return;
-          lit = q; Sfx.simon(q); setTimeout(() => { if (instance) lit = -1; }, 150);
-          if (q === seq[inputIdx]) {
-            inputIdx++;
-            if (inputIdx >= seq.length) eng.win();
-          } else {
-            eng.fail('Mauvaise séquence !');
+          press(q);
+        },
+        pointerdown(mx, my) {
+          for (let i = 0; i < 4; i++) {
+            const r = rects[i];
+            if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) { press(i); return; }
           }
         },
         draw(c) {
@@ -925,8 +971,8 @@
       function serve(toRight) { bx = W / 2; by = H / 2; bvx = (toRight ? 1 : -1) * speed; bvy = (Math.random() - 0.5) * speed; }
       return {
         update(dt) {
-          if (eng.upDown()) py -= 340 * dt;
-          if (eng.downDown()) py += 340 * dt;
+          if (eng.ptrActive) py = eng.ptr.y - ph / 2;
+          else { if (eng.upDown()) py -= 340 * dt; if (eng.downDown()) py += 340 * dt; }
           py = Math.max(0, Math.min(H - ph, py));
           // IA suit la balle
           const center = ay + ph / 2;
