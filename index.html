@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jeu de Labyrinthe — 15 niveaux</title>
+  <style>
+    :root {
+      --bg: #f0f0f0;
+      --board-bg: #ffffff;
+      --wall: #000000;
+      --player: #e53935;
+      --exit: #43a047;
+      --accent: #1e88e5;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      background-color: var(--bg);
+      color: #222;
+    }
+
+    h1 {
+      margin: 10px 0 4px;
+      font-size: 1.4rem;
+    }
+
+    #hud {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 10px;
+      font-size: 0.95rem;
+    }
+
+    #hud span { font-weight: bold; color: var(--accent); }
+
+    #game-board {
+      background-color: var(--board-bg);
+      border: 2px solid var(--wall);
+      touch-action: none;
+    }
+
+    #message {
+      margin-top: 12px;
+      min-height: 24px;
+      font-size: 1.05rem;
+      text-align: center;
+    }
+
+    #controls {
+      margin-top: 8px;
+      font-size: 0.85rem;
+      color: #555;
+      text-align: center;
+    }
+
+    button {
+      margin-top: 10px;
+      padding: 8px 16px;
+      font-size: 0.95rem;
+      border: none;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+    }
+
+    button:hover { background: #1565c0; }
+  </style>
+</head>
+<body>
+
+  <h1>Jeu de Labyrinthe</h1>
+  <div id="hud">
+    <div>Niveau&nbsp;: <span id="level">1</span>/15</div>
+    <div>Pas&nbsp;: <span id="moves">0</span></div>
+    <div>Temps&nbsp;: <span id="time">0s</span></div>
+  </div>
+
+  <canvas id="game-board" width="420" height="420"></canvas>
+
+  <div id="message"></div>
+  <div id="controls">Déplacez le carré rouge avec les flèches ou ZQSD jusqu'à la sortie verte.</div>
+  <button id="restart" style="display:none;">Rejouer</button>
+
+  <script>
+    // ---------------------------------------------------------------------
+    //  Configuration des 15 niveaux
+    //  La difficulté augmente : la grille s'agrandit niveau après niveau.
+    // ---------------------------------------------------------------------
+    const TOTAL_LEVELS = 15;
+    const CANVAS_SIZE = 420;
+
+    // Taille (en cellules) de chaque niveau : de 6x6 à 20x20.
+    function levelSize(level) {
+      return 6 + Math.round((level - 1) * (14 / (TOTAL_LEVELS - 1)));
+    }
+
+    // ---------------------------------------------------------------------
+    //  Générateur pseudo-aléatoire déterministe (mulberry32)
+    //  -> les labyrinthes sont identiques d'une partie à l'autre.
+    // ---------------------------------------------------------------------
+    function mulberry32(seed) {
+      return function () {
+        seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    // ---------------------------------------------------------------------
+    //  Génération d'un labyrinthe "parfait" (recursive backtracker).
+    //  Un labyrinthe parfait est entièrement connecté : la sortie est
+    //  donc toujours atteignable depuis le départ.
+    // ---------------------------------------------------------------------
+    function generateMaze(cols, rows, rand) {
+      // Chaque cellule possède 4 murs : top, right, bottom, left.
+      const cells = [];
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          cells.push({ x, y, walls: [true, true, true, true], visited: false });
+        }
+      }
+      const idx = (x, y) => y * cols + x;
+
+      const stack = [];
+      let current = cells[idx(0, 0)];
+      current.visited = true;
+      let visitedCount = 1;
+      const total = cols * rows;
+
+      while (visitedCount < total) {
+        const { x, y } = current;
+        const neighbours = [];
+        if (y > 0 && !cells[idx(x, y - 1)].visited) neighbours.push([cells[idx(x, y - 1)], 0, 2]);       // haut
+        if (x < cols - 1 && !cells[idx(x + 1, y)].visited) neighbours.push([cells[idx(x + 1, y)], 1, 3]); // droite
+        if (y < rows - 1 && !cells[idx(x, y + 1)].visited) neighbours.push([cells[idx(x, y + 1)], 2, 0]); // bas
+        if (x > 0 && !cells[idx(x - 1, y)].visited) neighbours.push([cells[idx(x - 1, y)], 3, 1]);        // gauche
+
+        if (neighbours.length > 0) {
+          const [next, wall, opposite] = neighbours[Math.floor(rand() * neighbours.length)];
+          current.walls[wall] = false;
+          next.walls[opposite] = false;
+          stack.push(current);
+          next.visited = true;
+          visitedCount++;
+          current = next;
+        } else {
+          current = stack.pop();
+        }
+      }
+      return { cols, rows, cells, idx };
+    }
+
+    // ---------------------------------------------------------------------
+    //  État du jeu
+    // ---------------------------------------------------------------------
+    const canvas = document.getElementById('game-board');
+    const ctx = canvas.getContext('2d');
+    const levelEl = document.getElementById('level');
+    const movesEl = document.getElementById('moves');
+    const timeEl = document.getElementById('time');
+    const messageEl = document.getElementById('message');
+    const restartBtn = document.getElementById('restart');
+
+    let level, maze, player, cell, moves, startTime, timerId, finished;
+
+    function loadLevel(n) {
+      level = n;
+      const size = levelSize(n);
+      // La graine combine un sel fixe et le numéro de niveau.
+      maze = generateMaze(size, size, mulberry32(1337 + n * 7919));
+      player = { x: 0, y: 0 };          // départ : coin haut-gauche
+      maze.exit = { x: size - 1, y: size - 1 }; // sortie : coin bas-droit
+      cell = CANVAS_SIZE / size;
+      moves = 0;
+      finished = false;
+
+      levelEl.textContent = n;
+      movesEl.textContent = '0';
+      messageEl.textContent = '';
+      restartBtn.style.display = 'none';
+
+      startTime = null;
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(updateTimer, 250);
+
+      draw();
+    }
+
+    function updateTimer() {
+      if (startTime === null || finished) return;
+      const s = Math.floor((Date.now() - startTime) / 1000);
+      timeEl.textContent = s + 's';
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+      // Sortie
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--exit');
+      ctx.fillRect(maze.exit.x * cell + 2, maze.exit.y * cell + 2, cell - 4, cell - 4);
+
+      // Murs
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = Math.max(1, cell * 0.08);
+      ctx.lineCap = 'round';
+      for (const c of maze.cells) {
+        const px = c.x * cell, py = c.y * cell;
+        ctx.beginPath();
+        if (c.walls[0]) { ctx.moveTo(px, py); ctx.lineTo(px + cell, py); }                 // haut
+        if (c.walls[1]) { ctx.moveTo(px + cell, py); ctx.lineTo(px + cell, py + cell); }    // droite
+        if (c.walls[2]) { ctx.moveTo(px, py + cell); ctx.lineTo(px + cell, py + cell); }    // bas
+        if (c.walls[3]) { ctx.moveTo(px, py); ctx.lineTo(px, py + cell); }                  // gauche
+        ctx.stroke();
+      }
+
+      // Joueur
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--player');
+      ctx.fillRect(player.x * cell + cell * 0.22, player.y * cell + cell * 0.22, cell * 0.56, cell * 0.56);
+    }
+
+    // Déplacement d'une cellule si aucun mur ne bloque.
+    function move(dx, dy) {
+      if (finished) return;
+      if (startTime === null) startTime = Date.now();
+
+      const c = maze.cells[maze.idx(player.x, player.y)];
+      if (dx === 1 && c.walls[1]) return;   // mur à droite
+      if (dx === -1 && c.walls[3]) return;  // mur à gauche
+      if (dy === 1 && c.walls[2]) return;   // mur en bas
+      if (dy === -1 && c.walls[0]) return;  // mur en haut
+
+      const nx = player.x + dx, ny = player.y + dy;
+      if (nx < 0 || ny < 0 || nx >= maze.cols || ny >= maze.rows) return;
+
+      player.x = nx; player.y = ny;
+      moves++;
+      movesEl.textContent = moves;
+      draw();
+
+      if (player.x === maze.exit.x && player.y === maze.exit.y) reachExit();
+    }
+
+    function reachExit() {
+      if (level < TOTAL_LEVELS) {
+        messageEl.textContent = `Niveau ${level} terminé ! 🎉`;
+        setTimeout(() => loadLevel(level + 1), 700);
+      } else {
+        finished = true;
+        clearInterval(timerId);
+        messageEl.textContent = `Bravo ! Vous avez terminé les ${TOTAL_LEVELS} niveaux ! 🏆`;
+        restartBtn.style.display = 'inline-block';
+      }
+    }
+
+    // ---------------------------------------------------------------------
+    //  Entrées clavier (flèches + ZQSD / WASD)
+    // ---------------------------------------------------------------------
+    window.addEventListener('keydown', function (e) {
+      const k = e.key.toLowerCase();
+      if (k === 'arrowup' || k === 'z' || k === 'w') { move(0, -1); e.preventDefault(); }
+      else if (k === 'arrowdown' || k === 's') { move(0, 1); e.preventDefault(); }
+      else if (k === 'arrowleft' || k === 'q' || k === 'a') { move(-1, 0); e.preventDefault(); }
+      else if (k === 'arrowright' || k === 'd') { move(1, 0); e.preventDefault(); }
+    });
+
+    restartBtn.addEventListener('click', () => loadLevel(1));
+
+    // Démarrage
+    loadLevel(1);
+  </script>
+
+</body>
+</html>
